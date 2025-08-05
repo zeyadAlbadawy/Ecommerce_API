@@ -1,5 +1,5 @@
 const dotenv = require('dotenv').config();
-const app = require('./app.js');
+const app = require('../app.js');
 const mongoose = require('mongoose');
 
 const DB = process.env.CONNECTING_URL.replace(
