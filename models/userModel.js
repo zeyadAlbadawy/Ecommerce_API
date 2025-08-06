@@ -41,12 +41,23 @@ const userSchema = new mongoose.Schema({
       },
       message: `Password doesn't match`,
     },
-    select: false
+    select: false,
   },
+  role: {
+    type: String,
+    default: 'user',
+  },
+  isBlocked: {
+    type: Boolean,
+    default: false,
+  },
+  cart: {
+    type: Array,
+    default: [],
+  },
+  addresss: [{ type: mongoose.Schema.ObjectId, ref: 'Address' }],
+  wishlist: [{ type: mongoose.Schema.ObjectId, ref: 'Product' }],
 });
-
-
-
 
 userSchema.pre('save', async function (next) {
   if (!this.isModified('password')) return next();
@@ -55,7 +66,10 @@ userSchema.pre('save', async function (next) {
   next();
 });
 
-userSchema.methods.checkPasswordCorrectness = async function (plainPassword, hashedPassword) { 
+userSchema.methods.checkPasswordCorrectness = async function (
+  plainPassword,
+  hashedPassword
+) {
   return await bcrypt.compare(plainPassword, hashedPassword);
 };
 const User = mongoose.model('User', userSchema);
