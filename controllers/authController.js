@@ -5,32 +5,44 @@ const jwtCreation = require('../config/jwtCreation.js');
 var jwt = require('jsonwebtoken');
 
 const handleRefreshToken = async (req, res, next) => {
-  // Get the refresh cookie from the cookies
-  const cookie = req.cookies;
-  if (!cookie?.refresJWTtoken)
-    return next(new AppError(`the refresh token not found`, 404));
+  try {
+    const cookies = req.cookies;
 
-  // Find user with the refresh token
-  const user = await User.findOne({ refreshedToken: cookie?.refresJWTtoken });
-  if (!user)
-    return next(
-      new AppError(`the user with the refreshed token does not exist`, 404)
-    );
+    if (!cookies?.refreshJWTtoken) {
+      return next(new AppError('Refresh token not found in cookies', 401));
+    }
 
-  // verify the recieved token
-  const decoded = jwt.verify(
-    cookie?.refresJWTtoken,
-    process.env.JWT_SECRET_KEY
-  );
-  if (user.id !== decoded.id)
-    return next(
-      new AppError(
-        `There is something wrong with the refreshed token, try again`,
-        400
-      )
-    );
-  const acessedToken = jwtCreation.createJWT(user.id);
-  res.status(200).json({ data: { token: acessedToken } });
+    const refreshToken = cookies.refreshJWTtoken;
+
+    // 1) Find user with that refresh token
+    const user = await User.findOne({ refreshedToken: refreshToken });
+    if (!user) {
+      return next(new AppError('User not found for this refresh token', 403));
+    }
+
+    // 2) Verify the token
+    let decoded;
+    try {
+      decoded = jwt.verify(refreshToken, process.env.JWT_SECRET_KEY);
+    } catch (err) {
+      return next(new AppError('Invalid or expired refresh token', 403));
+    }
+
+    // 3) Ensure token belongs to the user
+    if (decoded.id !== user.id) {
+      return next(new AppError('Refresh token user mismatch', 403));
+    }
+
+    // 4) Create and send new access token
+    const newAccessToken = jwtCreation.createJWT(user.id);
+
+    res.status(200).json({
+      status: 'success',
+      data: { token: newAccessToken },
+    });
+  } catch (err) {
+    next(err);
+  }
 };
 
 const createUser = async (req, res, next) => {
