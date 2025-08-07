@@ -1,11 +1,14 @@
 const express = require('express');
+const cookieParser = require('cookie-parser');
 const userRouter = require('./routes/userRouter');
 const app = express();
 const AppError = require('./utils/appError.js');
-const globalErrorHandler = require('./controllers/errorController.js')
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+const globalErrorHandler = require('./controllers/errorController.js');
 
+// MIDDLEWARES
+app.use(express.json());
+app.use(cookieParser());
+app.use(express.urlencoded({ extended: true }));
 
 // Routers Middleware
 app.use('/api/v1/users', userRouter);

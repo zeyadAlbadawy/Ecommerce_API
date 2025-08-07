@@ -1,6 +1,37 @@
 const User = require('../models/userModel');
 const AppError = require('../utils/appError');
-const { createJWT } = require('../config/jwtCreation.js');
+const validateID = require('../utils/validateMongooseID.js');
+const jwtCreation = require('../config/jwtCreation.js');
+var jwt = require('jsonwebtoken');
+
+const handleRefreshToken = async (req, res, next) => {
+  // Get the refresh cookie from the cookies
+  const cookie = req.cookies;
+  if (!cookie?.refresJWTtoken)
+    return next(new AppError(`the refresh token not found`, 404));
+
+  // Find user with the refresh token
+  const user = await User.findOne({ refreshedToken: cookie?.refresJWTtoken });
+  if (!user)
+    return next(
+      new AppError(`the user with the refreshed token does not exist`, 404)
+    );
+
+  // verify the recieved token
+  const decoded = jwt.verify(
+    cookie?.refresJWTtoken,
+    process.env.JWT_SECRET_KEY
+  );
+  if (user.id !== decoded.id)
+    return next(
+      new AppError(
+        `There is something wrong with the refreshed token, try again`,
+        400
+      )
+    );
+  const acessedToken = jwtCreation.createJWT(user.id);
+  res.status(200).json({ data: { token: acessedToken } });
+};
 
 const createUser = async (req, res, next) => {
   try {
@@ -21,6 +52,54 @@ const createUser = async (req, res, next) => {
       status: 'Success',
       data: { newUser },
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const logout = async (req, res, next) => {
+  try {
+    const cookies = req.cookies;
+
+    // 1) Check if refresh token cookie exists
+    if (!cookies?.refreshJWTtoken) {
+      res
+        .status(204)
+        .json({ status: 'No Content', message: 'No cookie found' });
+      return;
+    }
+
+    const refreshToken = cookies.refreshJWTtoken;
+
+    // 2) Find user by refresh token
+    const user = await User.findOne({ refreshedToken: refreshToken });
+
+    if (!user) {
+      // 3) Clear the cookie even if user not found
+      res.clearCookie('refreshJWTtoken', {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'Strict',
+      });
+      return res
+        .status(204)
+        .json({ status: 'No Content', message: 'User not found' });
+    }
+
+    // 4) Remove refresh token from user
+    user.refreshedToken = '';
+    await user.save();
+
+    // 5) Clear the cookie
+    res.clearCookie('refreshJWTtoken', {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'Strict',
+    });
+
+    res
+      .status(204)
+      .json({ status: 'Success', message: 'Logged out successfully' });
   } catch (err) {
     next(err);
   }
@@ -48,8 +127,21 @@ const login = async (req, res, next) => {
           401
         )
       );
-    console.log(user._id);
-    const token = createJWT(user?._id);
+    if (!validateID.validateUserID(user._id))
+      return next(
+        new AppError(`This id can not be found or it is not found `, 404)
+      );
+
+    const token = jwtCreation.createJWT(user?._id);
+    const refreshedToken = jwtCreation.refreshToken(user?._id);
+    await User.findByIdAndUpdate(user.id, { refreshedToken }, { new: true });
+    // This is used for authentication in the rendered websites
+    res.cookie('refreshJWTtoken', refreshedToken, {
+      httpOnly: true,
+      sameSite: 'Strict', // CSRF protection
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+    // This is used for building the api inside postman forexample
     res.status(200).json({
       staus: 'Success',
       data: { token },
@@ -76,6 +168,11 @@ const getAllUsers = async (req, res, next) => {
 const getOneUser = async (req, res, next) => {
   try {
     const { id } = req.params;
+    if (!validateID.validateUserID(id))
+      return next(
+        new AppError(`This id can not be found or it is not found `, 404)
+      );
+
     const user = await User.findById(id);
     if (!user)
       return next(
@@ -93,6 +190,11 @@ const getOneUser = async (req, res, next) => {
 const deleteUser = async (req, res, next) => {
   try {
     const { id } = req.params;
+    if (!validateID.validateUserID(id))
+      return next(
+        new AppError(`This id can not be found or it is not found `, 404)
+      );
+
     const user = await User.findByIdAndDelete(id);
     if (!user)
       return next(new AppError(`No user found with id of ${id}.`, 400));
@@ -163,10 +265,12 @@ const unBlockUser = async (req, res, next) => {
 };
 
 module.exports = {
+  handleRefreshToken,
   blockUser,
   unBlockUser,
   createUser,
   login,
+  logout,
   getAllUsers,
   getOneUser,
   deleteUser,

@@ -4,8 +4,9 @@ const authController = require('../controllers/authController.js');
 const authMiddleware = require('../midllewares/authMiddleware.js');
 userRouter.route('/register').post(authController.createUser);
 userRouter.route('/login').post(authController.login);
+userRouter.route('/logout').post(authController.logout);
 userRouter.route('/').get(authController.getAllUsers);
-
+userRouter.route('/refresh').get(authController.handleRefreshToken);
 userRouter
   .route('/:id')
   .get(

@@ -57,6 +57,7 @@ const userSchema = new mongoose.Schema({
   },
   addresss: [{ type: mongoose.Schema.ObjectId, ref: 'Address' }],
   wishlist: [{ type: mongoose.Schema.ObjectId, ref: 'Product' }],
+  refreshedToken: { type: String },
 });
 
 userSchema.pre('save', async function (next) {
